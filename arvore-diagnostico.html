@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Árvore de Diagnóstico de Processos</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.15);
+    --text: #1a1a18;
+    --text-muted: #7a7972;
+    --text-light: #b0afa8;
+    --ok-fill: #eaf3de; --ok-stroke: #3b6d11; --ok-text: #27500a;
+    --warn-fill: #faeeda; --warn-stroke: #854f0b; --warn-text: #633806;
+    --crit-fill: #fcebeb; --crit-stroke: #a32d2d; --crit-text: #501313;
+    --none-fill: #f1efe8; --none-stroke: #888780; --none-text: #2c2c2a;
+    --root-fill: #eeedfe; --root-stroke: #534ab7; --root-text: #26215c;
+    --accent: #534ab7;
+    --accent-light: #eeedfe;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    box-shadow: var(--shadow);
+  }
+  .logo {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  btn, .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .btn:hover { background: var(--bg); border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #4540a0; border-color: #4540a0; color: #fff; }
+  .btn-danger { color: #a32d2d; border-color: #f0c0c0; }
+  .btn-danger:hover { background: #fcebeb; border-color: #a32d2d; color: #a32d2d; }
+
+  /* TOOLBAR */
+  .toolbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 7px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .toolbar input:focus { border-color: var(--accent); background: var(--surface); }
+  .toolbar input::placeholder { color: var(--text-light); }
+  #inp-label { flex: 1; min-width: 180px; }
+  #inp-meta, #inp-real { width: 90px; }
+
+  /* MAIN */
+  main { padding: 24px; }
+
+  /* STATUS BAR */
+  #status {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin-bottom: 16px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+  #status.alert { background: #fcebeb; border-color: #f0c0c0; color: #a32d2d; }
+  #status.ok { background: #eaf3de; border-color: #9abe73; color: #27500a; }
+
+  /* SVG CARD */
+  .svg-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+    padding: 24px 16px 16px;
+  }
+  #tree-svg { display: block; width: 100%; min-width: 600px; }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    align-items: center;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* MODAL */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 24px;
+    width: 90%;
+    max-width: 360px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    animation: slideUp 0.18s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(16px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+  .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+  .modal label { font-size: 12px; color: var(--text-muted); display: block; margin-top: 12px; margin-bottom: 4px; font-weight: 500; }
+  .modal input, .modal select {
+    width: 100%;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+  }
+  .modal input:focus { border-color: var(--accent); }
+  .modal-btns { display: flex; gap: 8px; margin-top: 20px; }
+  .modal-btns button { flex: 1; }
+  .modal-note { font-size: 11px; color: var(--text-muted); margin-top: 10px; background: var(--bg); padding: 8px 10px; border-radius: 6px; line-height: 1.5; }
+
+  /* GARGALO PANEL */
+  #gargalo-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  #gargalo-panel h4 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .gargalo-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .gargalo-item:last-child { border-bottom: none; }
+  .gargalo-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; min-width: 44px; text-align: center; }
+
+  /* NODE hover */
+  .node-g { cursor: pointer; }
+  .node-g:hover { filter: brightness(0.96); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    Diagnóstico de Processos
+  </div>
+  <div class="header-actions">
+    <button class="btn" onclick="exportData()">⬇ Exportar dados</button>
+    <button class="btn" onclick="document.getElementById('file-import').click()">⬆ Importar dados</button>
+    <input type="file" id="file-import" accept=".json" style="display:none" onchange="importData(event)"/>
+    <button class="btn btn-danger" onclick="resetTree()">↺ Resetar</button>
+    <button class="btn btn-primary" onclick="analyzeGargalos()">🔍 Analisar gargalos</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input id="inp-label" placeholder="Nome da etapa do processo" />
+  <input id="inp-meta" type="number" placeholder="Meta" />
+  <input id="inp-real" type="number" placeholder="Real" />
+  <button class="btn btn-primary" onclick="addNode()">+ Adicionar etapa</button>
+</div>
+
+<main>
+  <div id="status">💡 Clique em qualquer nó da árvore para editar seus dados.</div>
+
+  <div id="gargalo-panel">
+    <h4>🚨 Análise de Gargalos</h4>
+    <div id="gargalo-list"></div>
+  </div>
+
+  <div class="svg-card">
+    <svg id="tree-svg" viewBox="0 0 900 500"></svg>
+  </div>
+
+  <div class="legend">
+    <span style="font-weight:600;font-size:12px;color:var(--text)">Legenda:</span>
+    <div class="legend-item"><div class="dot" style="background:#3b6d11"></div> Meta atingida (≥90%)</div>
+    <div class="legend-item"><div class="dot" style="background:#854f0b"></div> Atenção (60–89%)</div>
+    <div class="legend-item"><div class="dot" style="background:#a32d2d"></div> Crítico (&lt;60%)</div>
+    <div class="legend-item"><div class="dot" style="background:#888780"></div> Sem dados</div>
+    <div class="legend-item" style="margin-left:auto;font-size:11px;color:var(--text-light)">% nas setas = taxa de conversão entre etapas</div>
+  </div>
+</main>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay" onclick="overlayClick(event)">
+  <div class="modal">
+    <h3 id="modal-title">Editar etapa</h3>
+    <label>Nome da etapa</label>
+    <input id="ed-name" type="text"/>
+    <label>Meta (número)</label>
+    <input id="ed-meta" type="number" placeholder="ex: 50"/>
+    <label>Resultado real (número)</label>
+    <input id="ed-real" type="number" placeholder="ex: 32"/>
+    <label>Taxa de conversão esperada desta etapa (%)</label>
+    <input id="ed-conv" type="number" placeholder="ex: 30" min="0" max="100"/>
+    <label>Nó pai (mover etapa)</label>
+    <select id="ed-parent"></select>
+    <div class="modal-note">💡 A taxa de conversão aparece na seta de entrada desta etapa, mostrando quantos % avançam da etapa anterior para esta.</div>
+    <div class="modal-btns">
+      <button class="btn btn-danger" onclick="deleteNode()">🗑 Excluir</button>
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_NODES = [
+  { id:1, label:'Faturamento', meta:null, real:null, conv:null, parent:null, isRoot:true },
+  { id:2, label:'Esforço Comercial', meta:null, real:null, conv:null, parent:1 },
+  { id:3, label:'Esforço Operacional', meta:null, real:null, conv:null, parent:1 },
+  { id:4, label:'Leads gerados', meta:200, real:180, conv:null, parent:2 },
+  { id:5, label:'Reuniões agendadas', meta:60, real:45, conv:30, parent:4 },
+  { id:6, label:'Propostas enviadas', meta:40, real:38, conv:67, parent:5 },
+  { id:7, label:'Contratos assinados', meta:20, real:10, conv:50, parent:6 },
+  { id:8, label:'Vagas abertas', meta:30, real:28, conv:null, parent:3 },
+  { id:9, label:'Candidatos entregues', meta:90, real:60, conv:null, parent:8 },
+  { id:10, label:'Candidatos aprovados', meta:40, real:28, conv:44, parent:9 },
+  { id:11, label:'Início de trabalho', meta:30, real:22, conv:75, parent:10 },
+];
+
+let nodes = JSON.parse(JSON.stringify(DEFAULT_NODES));
+let nextId = 12;
+let editingId = null;
+
+// ---- SAVE TO LOCALSTORAGE ----
+function persist() { try { localStorage.setItem('arvore_nodes', JSON.stringify(nodes)); localStorage.setItem('arvore_nextId', nextId); } catch(e){} }
+function load() {
+  try {
+    const d = localStorage.getItem('arvore_nodes');
+    const n = localStorage.getItem('arvore_nextId');
+    if (d) { nodes = JSON.parse(d); nextId = n ? parseInt(n) : 20; }
+  } catch(e) {}
+}
+
+// ---- COLOR ----
+function getCol(n) {
+  if (n.isRoot) return { fill:'var(--root-fill)', stroke:'var(--root-stroke)', text:'var(--root-text)' };
+  if (n.meta == null || n.real == null) return { fill:'var(--none-fill)', stroke:'var(--none-stroke)', text:'var(--none-text)' };
+  const p = n.real / n.meta * 100;
+  if (p >= 90) return { fill:'var(--ok-fill)', stroke:'var(--ok-stroke)', text:'var(--ok-text)' };
+  if (p >= 60) return { fill:'var(--warn-fill)', stroke:'var(--warn-stroke)', text:'var(--warn-text)' };
+  return { fill:'var(--crit-fill)', stroke:'var(--crit-stroke)', text:'var(--crit-text)' };
+}
+
+// ---- LAYOUT ----
+function layout() {
+  const byParent = {};
+  nodes.forEach(n => {
+    const p = n.parent ?? 'ROOT';
+    if (!byParent[p]) byParent[p] = [];
+    byParent[p].push(n);
+  });
+  const NW = 136, NH = 56, HG = 32, VG = 72;
+  const pos = {};
+
+  function sw(id) {
+    const ch = byParent[id] || [];
+    if (!ch.length) return NW;
+    return ch.reduce((s, c) => s + sw(c.id) + HG, -HG);
+  }
+
+  function place(id, cx, depth) {
+    pos[id] = { x: cx - NW/2, y: 40 + depth*(NH+VG), w: NW, h: NH };
+    const ch = byParent[id] || [];
+    if (!ch.length) return;
+    const total = ch.reduce((s,c) => s + sw(c.id) + HG, -HG);
+    let lx = cx - total/2;
+    ch.forEach(c => { const s = sw(c.id); place(c.id, lx+s/2, depth+1); lx += s+HG; });
+  }
+
+  const root = nodes.find(n => n.isRoot);
+  if (root) {
+    const totalW = sw(root.id);
+    place(root.id, Math.max(450, totalW/2 + 40), 0);
+  }
+  return pos;
+}
+
+// ---- RENDER ----
+function render() {
+  const svg = document.getElementById('tree-svg');
+  const pos = layout();
+
+  // compute bounds
+  let maxX = 900, maxY = 500;
+  Object.values(pos).forEach(p => {
+    if (p.x + p.w + 40 > maxX) maxX = p.x + p.w + 40;
+    if (p.y + p.h + 40 > maxY) maxY = p.y + p.h + 40;
+  });
+  svg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+
+  let h = `<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#b0afa8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+
+  // edges
+  nodes.forEach(n => {
+    if (!n.parent || !pos[n.parent] || !pos[n.id]) return;
+    const p = pos[n.parent], c = pos[n.id];
+    const x1 = p.x+p.w/2, y1 = p.y+p.h, x2 = c.x+c.w/2, y2 = c.y;
+    const my = (y1+y2)/2;
+    h += `<path d="M${x1} ${y1} C${x1} ${my} ${x2} ${my} ${x2} ${y2}" fill="none" stroke="#d3d1c7" stroke-width="1" marker-end="url(#arr)"/>`;
+    if (n.conv != null) {
+      const col = n.conv >= 50 ? '#3b6d11' : n.conv >= 30 ? '#854f0b' : '#a32d2d';
+      const bg = n.conv >= 50 ? '#eaf3de' : n.conv >= 30 ? '#faeeda' : '#fcebeb';
+      h += `<rect x="${x2-20}" y="${my-10}" width="40" height="20" rx="10" fill="${bg}" stroke="${col}" stroke-width="0.5"/>
+        <text x="${x2}" y="${my+1}" text-anchor="middle" dominant-baseline="central" fill="${col}" font-family="DM Mono,monospace" font-size="10" font-weight="500">${n.conv}%</text>`;
+    }
+  });
+
+  // nodes
+  nodes.forEach(n => {
+    if (!pos[n.id]) return;
+    const { x, y, w, h: nh } = pos[n.id];
+    const col = getCol(n);
+    const cx = x + w/2;
+    const pct = (n.meta && n.real) ? Math.round(n.real/n.meta*100) : null;
+    const shortLabel = n.label.length > 16 ? n.label.slice(0,15)+'…' : n.label;
+    const metaStr = n.meta != null && n.real != null ? `${n.real} / ${n.meta}` : '';
+
+    h += `<g class="node-g" onclick="openEdit(${n.id})">
+      <rect x="${x}" y="${y}" width="${w}" height="${nh}" rx="9" fill="${col.fill}" stroke="${col.stroke}" stroke-width="0.8"/>
+      <text x="${cx}" y="${y + (metaStr?17:nh/2)}" text-anchor="middle" dominant-baseline="central" fill="${col.text}" font-family="DM Sans,sans-serif" font-size="12" font-weight="600">${shortLabel}</text>`;
+
+    if (metaStr) {
+      h += `<text x="${cx}" y="${y+32}" text-anchor="middle" dominant-baseline="central" fill="${col.stroke}" font-family="DM Mono,monospace" font-size="10">${metaStr}</text>`;
+      if (pct != null) {
+        const bw = w-24, bx = x+12, by = y+nh-7;
+        const fw = Math.min(bw, bw*pct/100);
+        h += `<rect x="${bx}" y="${by}" width="${bw}" height="3" rx="1.5" fill="${col.stroke}" opacity="0.18"/>
+          <rect x="${bx}" y="${by}" width="${fw}" height="3" rx="1.5" fill="${col.stroke}" opacity="0.7"/>`;
+      }
+    } else if (!n.isRoot) {
+      h += `<text x="${cx}" y="${y+35}" text-anchor="middle" dominant-baseline="central" fill="${col.stroke}" font-family="DM Sans,sans-serif" font-size="10" opacity="0.6">+ adicionar dados</text>`;
+    }
+    h += `</g>`;
+  });
+
+  svg.innerHTML = h;
+}
+
+// ---- MODAL ----
+function openEdit(id) {
+  editingId = id;
+  const n = nodes.find(x => x.id === id);
+  document.getElementById('modal-title').textContent = 'Editar: ' + n.label;
+  document.getElementById('ed-name').value = n.label;
+  document.getElementById('ed-meta').value = n.meta ?? '';
+  document.getElementById('ed-real').value = n.real ?? '';
+  document.getElementById('ed-conv').value = n.conv ?? '';
+
+  const sel = document.getElementById('ed-parent');
+  sel.innerHTML = '<option value="">— sem pai (raiz) —</option>';
+  nodes.filter(x => x.id !== id).forEach(x => {
+    sel.innerHTML += `<option value="${x.id}" ${x.id===n.parent?'selected':''}>${x.label}</option>`;
+  });
+
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('overlay').classList.remove('open'); editingId = null; }
+function overlayClick(e) { if (e.target.id==='overlay') closeModal(); }
+
+function saveEdit() {
+  if (!editingId) return;
+  const n = nodes.find(x => x.id === editingId);
+  n.label = document.getElementById('ed-name').value.trim() || n.label;
+  n.meta = parseFloat(document.getElementById('ed-meta').value) || null;
+  n.real = parseFloat(document.getElementById('ed-real').value) || null;
+  n.conv = parseFloat(document.getElementById('ed-conv').value) || null;
+  const pv = document.getElementById('ed-parent').value;
+  n.parent = pv ? parseInt(pv) : null;
+  if (!pv) n.isRoot = true; else n.isRoot = false;
+  closeModal();
+  persist();
+  render();
+  setStatus('✅ Etapa atualizada com sucesso!', 'ok');
+}
+
+function deleteNode() {
+  if (!editingId) return;
+  const n = nodes.find(x => x.id === editingId);
+  if (n.isRoot) { setStatus('⚠️ Não é possível excluir o nó raiz.', 'alert'); closeModal(); return; }
+  if (!confirm(`Excluir "${n.label}"? Os nós filhos serão desconectados.`)) return;
+  nodes = nodes.filter(x => x.id !== editingId);
+  nodes.forEach(x => { if (x.parent === editingId) x.parent = n.parent; });
+  closeModal();
+  persist();
+  render();
+  setStatus(`🗑 Etapa removida.`, '');
+}
+
+// ---- ADD NODE ----
+function addNode() {
+  const label = document.getElementById('inp-label').value.trim();
+  if (!label) { setStatus('⚠️ Digite o nome da etapa antes de adicionar.', 'alert'); return; }
+  const meta = parseFloat(document.getElementById('inp-meta').value) || null;
+  const real = parseFloat(document.getElementById('inp-real').value) || null;
+  const lastId = nodes[nodes.length-1].id;
+  nodes.push({ id: nextId++, label, meta, real, conv: null, parent: lastId, isRoot: false });
+  document.getElementById('inp-label').value = '';
+  document.getElementById('inp-meta').value = '';
+  document.getElementById('inp-real').value = '';
+  persist();
+  render();
+  setStatus(`✅ Etapa "${label}" adicionada. Clique nela para ajustar o nó pai.`, 'ok');
+}
+
+// ---- ANALYZE ----
+function analyzeGargalos() {
+  const issues = nodes
+    .filter(n => !n.isRoot && n.meta != null && n.real != null)
+    .map(n => ({ label: n.label, pct: Math.round(n.real/n.meta*100), real: n.real, meta: n.meta }))
+    .sort((a,b) => a.pct - b.pct);
+
+  if (!issues.length) { setStatus('⚠️ Adicione metas e resultados reais para analisar os gargalos.', 'alert'); return; }
+
+  const panel = document.getElementById('gargalo-panel');
+  const list = document.getElementById('gargalo-list');
+  panel.style.display = 'block';
+
+  list.innerHTML = issues.map(i => {
+    const col = i.pct >= 90 ? '#3b6d11' : i.pct >= 60 ? '#854f0b' : '#a32d2d';
+    const bg  = i.pct >= 90 ? '#eaf3de' : i.pct >= 60 ? '#faeeda' : '#fcebeb';
+    const icon = i.pct >= 90 ? '✅' : i.pct >= 60 ? '⚠️' : '🚨';
+    return `<div class="gargalo-item">
+      <span style="font-size:15px">${icon}</span>
+      <span style="flex:1;font-weight:500">${i.label}</span>
+      <span style="color:var(--text-muted);font-size:12px">Real: ${i.real} / Meta: ${i.meta}</span>
+      <span class="gargalo-badge" style="background:${bg};color:${col}">${i.pct}%</span>
+    </div>`;
+  }).join('');
+
+  const worst = issues.filter(i => i.pct < 60);
+  if (worst.length) {
+    setStatus(`🚨 ${worst.length} etapa(s) crítica(s): ${worst.map(i=>i.label).join(', ')}`, 'alert');
+  } else {
+    setStatus('✅ Nenhuma etapa crítica! Verifique as etapas em atenção.', 'ok');
+  }
+}
+
+// ---- EXPORT / IMPORT ----
+function exportData() {
+  const data = { nodes, nextId, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `diagnostico-processos-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  setStatus('⬇ Dados exportados com sucesso!', 'ok');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      nodes = data.nodes;
+      nextId = data.nextId || 20;
+      persist();
+      render();
+      setStatus(`✅ Dados importados: ${nodes.length} etapas carregadas.`, 'ok');
+    } catch(err) {
+      setStatus('⚠️ Arquivo inválido. Use um JSON exportado por este sistema.', 'alert');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ---- RESET ----
+function resetTree() {
+  if (!confirm('Resetar para o exemplo padrão? Os dados atuais serão perdidos.')) return;
+  nodes = JSON.parse(JSON.stringify(DEFAULT_NODES));
+  nextId = 12;
+  persist();
+  render();
+  document.getElementById('gargalo-panel').style.display = 'none';
+  setStatus('↺ Árvore resetada para o exemplo padrão.', '');
+}
+
+// ---- STATUS ----
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type || '';
+}
+
+// ---- INIT ----
+load();
+render();
+</script>
+</body>
+</html>
